@@ -1,0 +1,14 @@
+{
+  "name": "mashet-dev",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "seed": "wrangler kv key put --binding=SOURCE_KV public/index.html --path=public/index.html --remote && wrangler kv key put --binding=SOURCE_KV public/manifest.json --path=public/manifest.json --remote && wrangler kv key put --binding=SOURCE_KV public/sw.js --path=public/sw.js --remote",
+    "db:init": "wrangler d1 execute mashet-pwa-substrate --file=schema.sql --remote"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}
