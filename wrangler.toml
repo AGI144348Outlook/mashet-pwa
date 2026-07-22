@@ -1,0 +1,21 @@
+name = "mashet-dev"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+workers_dev = true
+
+# ── D1: stores dev conversation history + self-modification log ──
+[[d1_databases]]
+binding = "DB"
+database_name = "mashet-pwa-substrate"
+database_id = "REPLACE_WITH_YOUR_D1_ID"
+
+# ── KV: stores the live PWA source files (so the AI can read/write its own code) ──
+[[kv_namespaces]]
+binding = "SOURCE_KV"
+id = "REPLACE_WITH_YOUR_KV_ID"
+
+# Secrets — DO NOT put values here. Set with:
+#   wrangler secret put OPENROUTER_API_KEY
+#   wrangler secret put GITHUB_TOKEN
+#   wrangler secret put GITHUB_REPO        (e.g. "AGI144348Outlook/mashet-pwa")
+#   wrangler secret put DEPLOY_SECRET      (a password you invent, protects write endpoints)
