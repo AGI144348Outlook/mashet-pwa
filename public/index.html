@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mashet Dev — Self-Building PWA</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#c8922a">
+<style>
+  :root {
+    --black: #050505;
+    --amber: #c8922a;
+    --amber-bright: #f0b847;
+    --amber-dim: #6b4e15;
+    --white: #e8e4d9;
+    --dim: #4a4540;
+    --danger: #c85040;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--black);
+    color: var(--white);
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(200,146,42,0.2);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .title { color: var(--amber); letter-spacing: 0.15em; font-size: 13px; text-transform: uppercase; }
+  .status { font-size: 10px; color: var(--dim); }
+  .status.locked { color: var(--danger); }
+  .status.unlocked { color: var(--amber-bright); }
+  main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .msg { max-width: 85%; padding: 10px 14px; border-radius: 4px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: rgba(200,146,42,0.12); border: 1px solid rgba(200,146,42,0.3); }
+  .msg.assistant { align-self: flex-start; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); }
+  .msg code { color: var(--amber-bright); }
+  .file-block { margin-top: 8px; border: 1px solid rgba(200,146,42,0.3); border-radius: 4px; overflow: hidden; }
+  .file-block-header { background: rgba(200,146,42,0.1); padding: 6px 10px; font-size: 10px; letter-spacing: 0.1em; color: var(--amber); display: flex; justify-content: space-between; align-items: center; }
+  .file-block pre { padding: 10px; overflow-x: auto; font-size: 11px; color: rgba(232,228,217,0.8); }
+  .commit-btn { background: transparent; border: 1px solid var(--amber-dim); color: var(--amber); font-size: 9px; letter-spacing: 0.15em; padding: 3px 10px; cursor: pointer; text-transform: uppercase; }
+  .commit-btn:hover { border-color: var(--amber-bright); color: var(--amber-bright); }
+  footer {
+    padding: 14px 16px;
+    border-top: 1px solid rgba(200,146,42,0.2);
+    display: flex;
+    gap: 8px;
+  }
+  textarea {
+    flex: 1;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(200,146,42,0.2);
+    color: var(--white);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 10px;
+    border-radius: 4px;
+    resize: none;
+    min-height: 44px;
+  }
+  textarea:focus { outline: none; border-color: var(--amber); }
+  button.send {
+    background: var(--amber-dim);
+    border: none;
+    color: var(--black);
+    font-weight: bold;
+    letter-spacing: 0.1em;
+    padding: 0 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-size: 11px;
+  }
+  button.send:hover { background: var(--amber); }
+  button.send:disabled { opacity: 0.4; cursor: default; }
+  .secret-gate { max-width: 360px; margin: auto; text-align: center; padding: 24px; }
+  .secret-gate input { width: 100%; margin: 12px 0; padding: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--amber-dim); color: var(--white); border-radius: 4px; font-family: inherit; }
+  .secret-gate button { width: 100%; padding: 10px; background: var(--amber-dim); border: none; color: var(--black); font-weight: bold; border-radius: 4px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title">Mashet · Self-Developing PWA</div>
+  <div class="status" id="statusEl">checking access…</div>
+</header>
+
+<main id="chatEl"></main>
+
+<div id="gateEl" class="secret-gate" style="display:none">
+  <div class="title" style="margin-bottom:8px">Deploy access required</div>
+  <p style="font-size:11px;color:var(--dim)">File writes and commits need your deploy secret. Chat works without it.</p>
+  <input id="secretInput" type="password" placeholder="deploy secret">
+  <button onclick="saveSecret()">Unlock write access</button>
+</div>
+
+<footer>
+  <textarea id="inputEl" placeholder="Tell the dev-AI what to build or fix…"></textarea>
+  <button class="send" id="sendBtn" onclick="sendMessage()">Send</button>
+</footer>
+
+<script>
+const chatEl = document.getElementById('chatEl');
+const inputEl = document.getElementById('inputEl');
+const sendBtn = document.getElementById('sendBtn');
+const statusEl = document.getElementById('statusEl');
+const gateEl = document.getElementById('gateEl');
+
+let deploySecret = localStorage.getItem('mashet_deploy_secret') || '';
+updateStatus();
+
+function updateStatus() {
+  if (deploySecret) {
+    statusEl.textContent = 'write access unlocked';
+    statusEl.className = 'status unlocked';
+    gateEl.style.display = 'none';
+  } else {
+    statusEl.textContent = 'read-only (chat only)';
+    statusEl.className = 'status locked';
+    gateEl.style.display = 'block';
+  }
+}
+
+function saveSecret() {
+  const val = document.getElementById('secretInput').value.trim();
+  if (!val) return;
+  deploySecret = val;
+  localStorage.setItem('mashet_deploy_secret', val);
+  updateStatus();
+}
+
+function renderMessage(role, text) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+
+  // Extract ```file:path ... ``` blocks so they render with a commit button
+  const fileBlockRegex = /```file:([^\n]+)\n([\s\S]*?)```/g;
+  let lastIndex = 0;
+  let match;
+  let hasFileBlock = false;
+
+  while ((match = fileBlockRegex.exec(text)) !== null) {
+    hasFileBlock = true;
+    const before = text.slice(lastIndex, match.index);
+    if (before.trim()) div.appendChild(document.createTextNode(before));
+
+    const path = match[1].trim();
+    const content = match[2];
+
+    const block = document.createElement('div');
+    block.className = 'file-block';
+    const header = document.createElement('div');
+    header.className = 'file-block-header';
+    header.innerHTML = '<span>' + path + '</span>';
+    const btn = document.createElement('button');
+    btn.className = 'commit-btn';
+    btn.textContent = deploySecret ? 'Commit to GitHub' : 'Locked';
+    btn.disabled = !deploySecret;
+    btn.onclick = () => commitFile(path, content, btn);
+    header.appendChild(btn);
+    const pre = document.createElement('pre');
+    pre.textContent = content;
+    block.appendChild(header);
+    block.appendChild(pre);
+    div.appendChild(block);
+
+    lastIndex = fileBlockRegex.lastIndex;
+  }
+
+  if (!hasFileBlock) {
+    div.textContent = text;
+  } else {
+    const rest = text.slice(lastIndex);
+    if (rest.trim()) div.appendChild(document.createTextNode(rest));
+  }
+
+  chatEl.appendChild(div);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+async function commitFile(path, content, btn) {
+  btn.textContent = 'Committing…';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/commit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-deploy-secret': deploySecret },
+      body: JSON.stringify({ path, content, message: 'Update ' + path + ' via dev chat' }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      btn.textContent = 'Committed ✓';
+      // Also write it live to KV so the running app picks it up immediately
+      await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-deploy-secret': deploySecret },
+        body: JSON.stringify({ path, content }),
+      });
+    } else {
+      btn.textContent = 'Failed — retry';
+      btn.disabled = false;
+    }
+  } catch (e) {
+    btn.textContent = 'Failed — retry';
+    btn.disabled = false;
+  }
+}
+
+async function sendMessage() {
+  const text = inputEl.value.trim();
+  if (!text) return;
+  inputEl.value = '';
+  sendBtn.disabled = true;
+  renderMessage('user', text);
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text }),
+    });
+    const data = await res.json();
+    renderMessage('assistant', data.reply || data.error || '(no response)');
+  } catch (e) {
+    renderMessage('assistant', 'Error reaching the dev-AI: ' + e.message);
+  }
+  sendBtn.disabled = false;
+}
+
+inputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// Load prior history on boot
+(async () => {
+  try {
+    const res = await fetch('/api/history');
+    const rows = await res.json();
+    rows.forEach((r) => renderMessage(r.role, r.content));
+  } catch (e) {}
+})();
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js');
+}
+</script>
+</body>
+</html>
